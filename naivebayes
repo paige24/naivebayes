@@ -1,0 +1,146 @@
+import numpy as np
+import csv
+"""
+Implement the Naïve Bayesian Classifier for binary input/output data. 
+To estimate parameters use Maximum A Posteriori with Laplace Estimators. 
+"""
+
+
+def calc_accuracy(testing_data):
+    tests_0 = 0
+    tests_1 = 0
+    correct_0 = 0
+    correct_1 = 0
+    for instance in testing_data:
+        label = int(instance['Label'])
+        prediction = int(instance['Prediction'])
+        if label == 0:
+            tests_0 += 1
+            if label == prediction:
+                correct_0 += 1
+        if label == 1:
+            tests_1 += 1
+            if label == prediction:
+                correct_1 += 1
+    count_correct = correct_0 + correct_1
+    accuracy = count_correct / len(testing_data)
+    print('Overall Accuracy: ', accuracy)
+    print('Tested ', len(testing_data),', correctly classified ', count_correct)
+    print('Class 0: tested', tests_0,', correctly classified ', correct_0)
+    print('Class 1: tested', tests_1,', correctly classified ', correct_1)
+    return
+
+
+def make_prediction(instance, condition_y_0, condition_y_1, p_y_0, p_y_1):
+    """
+    Make prediction for a single instance in the testing data.
+    """
+    # calc y hat for y = 0 condition
+    log_y_0 = np.log(p_y_0)
+    log_sum = 0
+    for key in instance:
+        if key == 'Label' or key == 'Demographic':
+            break
+        if instance[key] == '1':
+            cur_x_p = condition_y_0[key]
+        else:
+            cur_x_p = 1 - condition_y_0[key]
+        log_sum += np.log(cur_x_p)
+    p_y_0 = log_y_0 + log_sum
+
+    # calc y hat for y = 1 condition
+    log_y_1 = np.log(p_y_1)
+    log_sum = 0
+    for key in instance:
+        if key == 'Label' or key == 'Demographic':
+            break
+        if instance[key] == '1':
+            cur_x_p = condition_y_1[key]
+        else:
+            cur_x_p = 1 - condition_y_1[key]
+        log_sum += np.log(cur_x_p)
+    p_y_1 = log_y_1 + log_sum
+
+    if p_y_0 > p_y_1:
+        return 0
+    else:
+        return 1
+
+
+def test_model(testing_data, condition_y_0, condition_y_1, p_y_0, p_y_1):
+    """
+    Test model using parameters found by training function. Update testing
+    data to include calculated prediction as another key in the dictionary.
+    """
+    for instance in testing_data:
+        prediction = make_prediction(instance, condition_y_0, condition_y_1, p_y_0, p_y_1)
+        instance['Prediction'] = prediction
+    return testing_data
+
+
+def train_model(training_data):
+    """
+    Use a Laplace MAP estimate to train model.
+    Estimate probability that Xi = xi given Y = y.
+    Calculate by dividing number of training examples where
+    Xi = xi and Y = y + 1 by number of training examples
+    where Y = y + 2.
+    """
+    # find count y=1 and count y=0
+    count_y_equal_1 = 0
+    for i in range(len(training_data)):
+        if training_data[i]['Label'] == '1':
+            count_y_equal_1 += 1
+    count_y_equal_0 = len(training_data) - count_y_equal_1
+
+    # calc P(y=0) and P(y=1)
+    p_y_0 = count_y_equal_0 / len(training_data)
+    p_y_1 = 1 - p_y_0
+
+    # estimate p(xi = 1|y=0) and p(xi = 1|y=1) and store in dictionaries
+    condition_y_0 = {}
+    condition_y_1 = {}
+    for key in training_data[0]:
+        if key == 'Label' or key == 'Demographic':
+            break
+        count_xi_1_y_0 = 0
+        count_xi_1_y_1 = 0
+        for instance in training_data:
+            if instance[key] == '1' and instance['Label'] == '0':
+                count_xi_1_y_0 += 1
+            elif instance[key] == '1' and instance['Label'] == '1':
+                count_xi_1_y_1 += 1
+            condition_y_0[key] = (count_xi_1_y_0 + 1) / (count_y_equal_0 + 2)
+            condition_y_1[key] = (count_xi_1_y_1 + 1) / (count_y_equal_1 + 2)
+    return condition_y_0, condition_y_1, p_y_0, p_y_1
+
+
+def csv_reader(filename):
+    # Create a reader
+    reader = csv.DictReader(open(filename))
+    # for row in reader:
+    #     print(row)
+    return reader
+
+
+def main():
+    # create training and testing data from files
+    training_data_reader = csv_reader("heart-train.csv")
+    training_data = list(training_data_reader)
+    testing_data_reader = csv_reader("heart-test.csv")
+    testing_data = list(testing_data_reader)
+
+    # set parameters found from training model and use to test model
+    parameters = train_model(training_data)
+    condition_y_0 = parameters[0]
+    condition_y_1 = parameters[1]
+    p_y_0 = parameters[2]
+    p_y_1 = parameters[3]
+
+    # print(condition_y_0, condition_y_1)
+    test_model(testing_data, condition_y_0, condition_y_1, p_y_0, p_y_1)
+    calc_accuracy(testing_data)
+
+
+if __name__ == '__main__':
+    main()
